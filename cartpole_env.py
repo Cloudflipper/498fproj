@@ -154,91 +154,91 @@ class CartpoleEnv(BaseEnv):
         return A, B
 
 
-def dynamics_analytic(state, action):
-    """
-        Computes x_t+1 = f(x_t, u_t) using analytic model of dynamics in Pytorch
-        Should support batching
-    Args:
-        state: torch.tensor of shape (B, 4) representing the cartpole state
-        control: torch.tensor of shape (B, 1) representing the force to apply
+# def dynamics_analytic(state, action):
+#     """
+#         Computes x_t+1 = f(x_t, u_t) using analytic model of dynamics in Pytorch
+#         Should support batching
+#     Args:
+#         state: torch.tensor of shape (B, 4) representing the cartpole state
+#         control: torch.tensor of shape (B, 1) representing the force to apply
 
-    Returns:
-        next_state: torch.tensor of shape (B, 4) representing the next cartpole state
+#     Returns:
+#         next_state: torch.tensor of shape (B, 4) representing the next cartpole state
 
-    """
+#     """
     
-    dt = 0.05
-    g = 9.81
-    mc = 1
-    mp = 0.1
-    l = 0.5
+#     dt = 0.05
+#     g = 9.81
+#     mc = 1
+#     mp = 0.1
+#     l = 0.5
 
-    # --- Your code here
-    print(state)
-    x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
-    force = action.squeeze(-1)  # Ensure action is (B,) if it was (B, 1)
+#     # --- Your code here
+#     print(state)
+#     x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+#     force = action.squeeze(-1)  # Ensure action is (B,) if it was (B, 1)
 
-    # Calculate theta_double_dot
-    cos_theta = torch.cos(theta)
-    sin_theta = torch.sin(theta)
-    denominator_theta = l * (4/3 - (mp * cos_theta**2) / (mc + mp))
-    theta_dot_dot = (g * sin_theta - cos_theta * (force + mp * l * theta_dot**2 * sin_theta) / (mc + mp)) / denominator_theta
+#     # Calculate theta_double_dot
+#     cos_theta = torch.cos(theta)
+#     sin_theta = torch.sin(theta)
+#     denominator_theta = l * (4/3 - (mp * cos_theta**2) / (mc + mp))
+#     theta_dot_dot = (g * sin_theta - cos_theta * (force + mp * l * theta_dot**2 * sin_theta) / (mc + mp)) / denominator_theta
 
-    # Calculate x_double_dot
-    x_dot_dot_numerator = force + mp * l * (theta_dot**2 * sin_theta - theta_dot_dot * cos_theta)
-    x_dot_dot = x_dot_dot_numerator / (mc + mp)
+#     # Calculate x_double_dot
+#     x_dot_dot_numerator = force + mp * l * (theta_dot**2 * sin_theta - theta_dot_dot * cos_theta)
+#     x_dot_dot = x_dot_dot_numerator / (mc + mp)
 
-    # Update next state components
-    x_dot_next = x_dot + dt * x_dot_dot
-    theta_dot_next = theta_dot + dt * theta_dot_dot
+#     # Update next state components
+#     x_dot_next = x_dot + dt * x_dot_dot
+#     theta_dot_next = theta_dot + dt * theta_dot_dot
 
-    x_next = x + dt * x_dot_next
-    theta_next = theta + dt * theta_dot_next
+#     x_next = x + dt * x_dot_next
+#     theta_next = theta + dt * theta_dot_next
 
-    # Reshape each component to (B, 1) and concatenate
-    next_state = torch.stack([
-        x_next.unsqueeze(-1),
-        theta_next.unsqueeze(-1),
-        x_dot_next.unsqueeze(-1),
-        theta_dot_next.unsqueeze(-1)
-    ], dim=-1).squeeze(1)  # Combine to (B, 4)
+#     # Reshape each component to (B, 1) and concatenate
+#     next_state = torch.stack([
+#         x_next.unsqueeze(-1),
+#         theta_next.unsqueeze(-1),
+#         x_dot_next.unsqueeze(-1),
+#         theta_dot_next.unsqueeze(-1)
+#     ], dim=-1).squeeze(1)  # Combine to (B, 4)
 
-    # ---
+#     # ---
 
-    return next_state
+#     return next_state
 
 
-def linearize_pytorch(state, control):
-    """
-        Linearizes cartpole dynamics around linearization point (state, control). Uses autograd of analytic dynamics
-    Args:
-        state: torch.tensor of shape (4,) representing cartpole state
-        control: torch.tensor of shape (1,) representing the force to apply
+# def linearize_pytorch(state, control):
+#     """
+#         Linearizes cartpole dynamics around linearization point (state, control). Uses autograd of analytic dynamics
+#     Args:
+#         state: torch.tensor of shape (4,) representing cartpole state
+#         control: torch.tensor of shape (1,) representing the force to apply
 
-    Returns:
-        A: torch.tensor of shape (4, 4) representing Jacobian df/dx for dynamics f
-        B: torch.tensor of shape (4, 1) representing Jacobian df/du for dynamics f
+#     Returns:
+#         A: torch.tensor of shape (4, 4) representing Jacobian df/dx for dynamics f
+#         B: torch.tensor of shape (4, 1) representing Jacobian df/du for dynamics f
 
-    """
+#     """
 
-    # --- Your code here
-    state = state.requires_grad_(True)
-    control = control.requires_grad_(True)
+#     # --- Your code here
+#     state = state.requires_grad_(True)
+#     control = control.requires_grad_(True)
 
-    next_state = dynamics_analytic(state.reshape(1,4), control.reshape(1,1)).squeeze(0)
-    A = torch.zeros((4, 4), dtype=state.dtype)
-    for i in range(4):
-        grad_outputs = torch.zeros_like(next_state)
-        grad_outputs[i] = 1.0
-        grads = torch.autograd.grad(next_state, state, grad_outputs=grad_outputs, retain_graph=True)[0]
-        A[i, :] = grads
+#     next_state = dynamics_analytic(state.reshape(1,4), control.reshape(1,1)).squeeze(0)
+#     A = torch.zeros((4, 4), dtype=state.dtype)
+#     for i in range(4):
+#         grad_outputs = torch.zeros_like(next_state)
+#         grad_outputs[i] = 1.0
+#         grads = torch.autograd.grad(next_state, state, grad_outputs=grad_outputs, retain_graph=True)[0]
+#         A[i, :] = grads
 
-    B = torch.zeros((4, 1), dtype=control.dtype)
-    for i in range(4):
-        grad_outputs = torch.zeros_like(next_state)
-        grad_outputs[i] = 1.0
-        grads = torch.autograd.grad(next_state, control, grad_outputs=grad_outputs, retain_graph=True)[0]
-        B[i, :] = grads
+#     B = torch.zeros((4, 1), dtype=control.dtype)
+#     for i in range(4):
+#         grad_outputs = torch.zeros_like(next_state)
+#         grad_outputs[i] = 1.0
+#         grads = torch.autograd.grad(next_state, control, grad_outputs=grad_outputs, retain_graph=True)[0]
+#         B[i, :] = grads
 
-    # ---
-    return A, B
+#     # ---
+#     return A, B
