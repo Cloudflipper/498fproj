@@ -36,7 +36,7 @@ class CartpoleEnv(BaseEnv):
         if state is not None:
             self.state = state
         else:
-            self.state = np.random.uniform(low=-0.05, high=0.05, size=(4,))
+            self.state = np.random.uniform(low=-0.05, high=0.05, size=(6,))
         p.resetSimulation()
         p.setAdditionalSearchPath(pd.getDataPath())
         self.cartpole = p.loadURDF('cartpole.urdf')
@@ -49,6 +49,9 @@ class CartpoleEnv(BaseEnv):
                          lateralFriction=0, spinningFriction=0, rollingFriction=0)
         p.changeDynamics(self.cartpole, -1, linearDamping=0, angularDamping=0,
                          lateralFriction=0, spinningFriction=0, rollingFriction=0)
+        p.changeDynamics(self.cartpole, 2, linearDamping=0, angularDamping=0,
+                         lateralFriction=0, spinningFriction=0, rollingFriction=0)
+        p.setJointMotorControl2(self.cartpole, 2, p.VELOCITY_CONTROL, force=0)
         p.setJointMotorControl2(self.cartpole, 1, p.VELOCITY_CONTROL, force=0)
         p.setJointMotorControl2(self.cartpole, 0, p.VELOCITY_CONTROL, force=0)
         self.set_state(self.state)
@@ -68,9 +71,10 @@ class CartpoleEnv(BaseEnv):
         return np.array([x, theta, x_dot, theta_dot])
 
     def set_state(self, state):
-        x, theta, x_dot, theta_dot = state
+        x, theta1, theta2, x_dot, theta1_dot, theta2_dot = state
         p.resetJointState(self.cartpole, 0, targetValue=x, targetVelocity=x_dot)
-        p.resetJointState(self.cartpole, 1, targetValue=theta, targetVelocity=theta_dot)
+        p.resetJointState(self.cartpole, 1, targetValue=theta1, targetVelocity=theta1_dot)
+        p.resetJointState(self.cartpole, 2, targetValue=theta2, targetVelocity=theta2_dot)
 
     def _get_action_space(self):
         action_space = gym.spaces.Box(low=-30, high=30)  # linear force # TODO: Verify that they are correct
@@ -82,8 +86,8 @@ class CartpoleEnv(BaseEnv):
         x_dot_lims = [-10, 10]
         theta_dot_lims = [-5 * np.pi, 5 * np.pi]
         state_space = gym.spaces.Box(
-            low=np.array([x_lims[0], theta_lims[0], x_dot_lims[0], theta_dot_lims[0]], dtype=np.float32),
-            high=np.array([x_lims[1], theta_lims[1], x_dot_lims[1], theta_dot_lims[1]],
+            low=np.array([x_lims[0], theta_lims[0],theta_lims[0], x_dot_lims[0], theta_dot_lims[0], theta_dot_lims[0]], dtype=np.float32),
+            high=np.array([x_lims[1], theta_lims[1],theta_lims[1], x_dot_lims[1], theta_dot_lims[1],theta_dot_lims[1]],
                           dtype=np.float32))  # linear force # TODO: Verify that they are correct
         return state_space
 
@@ -110,21 +114,21 @@ class CartpoleEnv(BaseEnv):
         """
             Linearizes cartpole dynamics around linearization point (state, control). Uses numerical differentiation
         Args:
-            state: np.array of shape (4,) representing cartpole state
+            state: np.array of shape (6,) representing cartpole state
             control: np.array of shape (1,) representing the force to apply
             eps: Small change for computing numerical derivatives
         Returns:
-            A: np.array of shape (4, 4) representing Jacobian df/dx for dynamics f
-            B: np.array of shape (4, 1) representing Jacobian df/du for dynamics f
+            A: np.array of shape (6, 6) representing Jacobian df/dx for dynamics f
+            B: np.array of shape (6, 1) representing Jacobian df/du for dynamics f
         """
 
-        A = np.zeros((4, 4))
-        B = np.zeros((4, 1))
+        A = np.zeros((6, 6))
+        B = np.zeros((6, 1))
         # --- Your code here
-        state_tensor = torch.from_numpy(state).float().reshape(1, 4)
+        state_tensor = torch.from_numpy(state).float().reshape(1, 6)
         control_tensor = torch.from_numpy(control).float().reshape(1, 1)
 
-        for i in range(4):
+        for i in range(6):
             state_plus = state.copy()
             state_plus[i] += eps
             self.set_state(state_plus)
