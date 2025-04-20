@@ -187,3 +187,63 @@ class MPPIController(object):
         next_state = self.env.batched_dynamics(state.cpu().detach().numpy(), action.cpu().detach().numpy())
         next_state = torch.tensor(next_state, dtype=state.dtype)
         return next_state
+
+
+import torch
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
+from numpngw import write_apng
+from tqdm import tqdm
+from cartpole_env import * 
+
+def create_env():
+    env = CartpoleEnv()
+    env.reset(np.array([0, np.pi, 0, 0]) + np.random.rand(4,)) 
+    return env
+
+def main():
+    # 初始化环境
+    env = create_env()
+    
+    goal_state = np.zeros(4)
+    controller = MPPIController(env, num_samples=500, horizon=30, hyperparams=get_cartpole_mppi_hyperparams())
+    controller.goal_state = torch.tensor(goal_state, dtype=torch.float32)
+
+    frames = []
+    num_steps = 150
+    
+    # 进度条
+    pbar = tqdm(range(num_steps))
+    
+    for i in pbar:
+        state = env.get_state()
+        state = torch.tensor(state, dtype=torch.float32)
+        control = controller.command(state)
+        s = env.step(control)
+        
+        error_i = np.linalg.norm(s - goal_state[:7])
+        pbar.set_description(f'Goal Error: {error_i:.4f}')
+        
+        # 渲染图像
+        img = env.render()
+
+        frames.append(img)
+
+        # 如果误差小于0.2则提前结束
+        if error_i < 0.2:
+            break
+    
+    print("creating animated gif, please wait about 10 seconds")
+    
+    # 创建APNG动图
+    write_apng("cartpole_mppi.gif", frames, delay=10)
+    print("GIF created successfully!")
+
+    # 显示GIF（在本地环境中可能需要用合适的工具显示 GIF）
+    plt.imshow(plt.imread("cartpole_mppi.gif"))
+    plt.axis('off')  # 不显示坐标轴
+    plt.show()
+
+if __name__ == "__main__":
+    main()
