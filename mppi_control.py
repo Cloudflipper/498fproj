@@ -11,13 +11,13 @@ def get_cartpole_mppi_hyperparams():
      * noise_sigma: torch tensor fo size (action_size, action_size) representing the covariance matrix  of the random action perturbations.
     """
     action_size = 1
-    state_size = 4
+    state_size = 6
     hyperparams = {
         'action_size': action_size,
         'state_size': state_size,
-        'lambda': 0.2,
-        'Q': torch.diag(torch.tensor([1.0, 0.1, 1.0,0.1])).float(),
-        'noise_sigma': torch.eye(action_size) * 0.5,
+        'lambda': 0.01,
+        'Q': torch.diag(torch.tensor([1.0, 5, 5, 0.1, 0.1, 0.1])).float(),
+        'noise_sigma': torch.eye(action_size) * 10,
     }
     # --- Your code here
 
@@ -188,32 +188,35 @@ class MPPIController(object):
         next_state = torch.tensor(next_state, dtype=state.dtype)
         return next_state
 
-
+from PIL import Image as PILImage
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
-from numpngw import write_apng
 from tqdm import tqdm
 from cartpole_env import * 
 
 def create_env():
     env = CartpoleEnv()
-    env.reset(np.array([0, np.pi, 0, 0]) + np.random.rand(4,)) 
+    # env.reset(np.array([0, 0.1, 0.1, 0, 0, 0]) + np.random.rand(6,))
+    env.reset(np.array([0, 0.1, 0.1, 0, 0, 0]))
+
     return env
 
 def main():
     # 初始化环境
     env = create_env()
     
-    goal_state = np.zeros(4)
+    goal_state = np.zeros(6)
     controller = MPPIController(env, num_samples=500, horizon=30, hyperparams=get_cartpole_mppi_hyperparams())
     controller.goal_state = torch.tensor(goal_state, dtype=torch.float32)
 
     frames = []
     num_steps = 150
+
+    Q = np.diag([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])  # 状态成本权重
+    R = np.array([0.1])  # 控制输入成本权重
     
-    # 进度条
     pbar = tqdm(range(num_steps))
     
     for i in pbar:
@@ -222,22 +225,34 @@ def main():
         control = controller.command(state)
         s = env.step(control)
         
-        error_i = np.linalg.norm(s - goal_state[:7])
+        # error_i = np.linalg.norm(s - goal_state[:7])state_cost = float(state_diff.T @ Q @ state_diff)  # 转换为Python float
+
+        state_diff = s[:6] - goal_state
+        import ipdb
+        # ipdb.set_trace()
+        state_cost = state_diff.T @ Q @ state_diff
+        input = control.detach().cpu().numpy()
+        control_cost = (R * input**2).item()  
+        angle_penalty = -50 * (np.cos(s[1]) + np.cos(s[2]) - 2)
+        error_i = state_cost + control_cost + angle_penalty
+
         pbar.set_description(f'Goal Error: {error_i:.4f}')
         
         # 渲染图像
         img = env.render()
 
-        frames.append(img)
+        # 将图像保存为帧
+        frames.append(PILImage.fromarray(img))
 
         # 如果误差小于0.2则提前结束
         if error_i < 0.2:
             break
     
     print("creating animated gif, please wait about 10 seconds")
-    
-    # 创建APNG动图
-    write_apng("cartpole_mppi.gif", frames, delay=10)
+
+    # 创建 GIF 动画（使用 PIL）
+    frames[0].save("cartpole_mppi.gif", save_all=True, append_images=frames[1:], duration=100, loop=0)
+
     print("GIF created successfully!")
 
     # 显示GIF（在本地环境中可能需要用合适的工具显示 GIF）

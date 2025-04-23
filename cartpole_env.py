@@ -30,7 +30,7 @@ class CartpoleEnv(BaseEnv):
         """
             Resets the environment
         Args:
-            state: np.array of shape (4,) representing cartpole state to reset to.
+            state: np.array of shape (6,) representing cartpole state to reset to.
                    If None then state is randomly sampled
         """
         if state is not None:
@@ -39,8 +39,7 @@ class CartpoleEnv(BaseEnv):
             self.state = np.random.uniform(low=-0.05, high=0.05, size=(6,))
         p.resetSimulation()
         p.setAdditionalSearchPath(pd.getDataPath())
-        # file_path = os.path.join(GOOGLE_DRIVE_PATH, 'pushing_dp_training_data.npy')
-        self.cartpole = p.loadURDF('drive/My Drive/ROB498/HW2/cartpole2.urdf')
+        self.cartpole = p.loadURDF('cartpole2.urdf')
         p.setGravity(0, 0, -9.81)
         p.setTimeStep(self.dt)
         p.setRealTimeSimulation(0)
@@ -63,13 +62,16 @@ class CartpoleEnv(BaseEnv):
             Gets the cartpole internal state
 
         Returns:
-            state: np.array of shape (4,) representing cartpole state [x, theta, x_dot, theta_dot]
+            state: np.array of shape (6,) representing cartpole state [x, theta_1, theta_2, x_dot, theta_1_dot, theta_2_dot]
 
         """
 
         x, x_dot = p.getJointState(self.cartpole, 0)[0:2]
-        theta, theta_dot = p.getJointState(self.cartpole, 1)[0:2]
-        return np.array([x, theta, x_dot, theta_dot])
+        theta_1, theta_1_dot = p.getJointState(self.cartpole, 1)[0:2]
+        theta_2, theta_2_dot = p.getJointState(self.cartpole, 2)[0:2]
+        # theta_2 += theta_1
+        # theta_2_dot += theta_1_dot
+        return np.array([x, theta_1, theta_2, x_dot, theta_1_dot, theta_2_dot])
 
     def set_state(self, state):
         x, theta1, theta2, x_dot, theta1_dot, theta2_dot = state
@@ -83,12 +85,14 @@ class CartpoleEnv(BaseEnv):
 
     def _get_state_space(self):
         x_lims = [-5, 5]  # TODO: Verify that they are the correct limits
-        theta_lims = [-np.pi, np.pi]
+        theta_1_lims = [-np.pi, np.pi]
+        theta_2_lims = [-np.pi, np.pi]
         x_dot_lims = [-10, 10]
-        theta_dot_lims = [-5 * np.pi, 5 * np.pi]
+        theta_1_dot_lims = [-5 * np.pi, 5 * np.pi]
+        theta_2_dot_lims = [-5 * np.pi, 5 * np.pi]
         state_space = gym.spaces.Box(
-            low=np.array([x_lims[0], theta_lims[0],theta_lims[0], x_dot_lims[0], theta_dot_lims[0], theta_dot_lims[0]], dtype=np.float32),
-            high=np.array([x_lims[1], theta_lims[1],theta_lims[1], x_dot_lims[1], theta_dot_lims[1],theta_dot_lims[1]],
+            low=np.array([x_lims[0], theta_1_lims[0],theta_2_lims[0], x_dot_lims[0], theta_1_dot_lims[0], theta_2_dot_lims[0]], dtype=np.float32),
+            high=np.array([x_lims[1], theta_1_lims[1],theta_2_lims[1], x_dot_lims[1], theta_1_dot_lims[1],theta_2_dot_lims[1]],
                           dtype=np.float32))  # linear force # TODO: Verify that they are correct
         return state_space
 
