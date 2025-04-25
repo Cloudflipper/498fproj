@@ -39,7 +39,7 @@ class CartpoleEnv(BaseEnv):
             self.state = np.random.uniform(low=-0.05, high=0.05, size=(6,))
         p.resetSimulation()
         p.setAdditionalSearchPath(pd.getDataPath())
-        self.cartpole = p.loadURDF('cartpole2.urdf')
+        self.cartpole = p.loadURDF('cartpole1.urdf')
         p.setGravity(0, 0, -9.81)
         p.setTimeStep(self.dt)
         p.setRealTimeSimulation(0)

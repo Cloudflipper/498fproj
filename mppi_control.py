@@ -195,11 +195,14 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from cartpole_env import * 
+# from cartpole_env1 import * 
 
 def create_env():
     env = CartpoleEnv()
+    # env = MyCartpoleEnv()
+
     # env.reset(np.array([0, 0.1, 0.1, 0, 0, 0]) + np.random.rand(6,))
-    env.reset(np.array([0, 0.1, 0.1, 0, 0, 0]))
+    env.reset(np.array([0, 0.1, 0.05, 0, 0, 0]))
 
     return env
 
@@ -208,13 +211,14 @@ def main():
     env = create_env()
     
     goal_state = np.zeros(6)
-    controller = MPPIController(env, num_samples=500, horizon=30, hyperparams=get_cartpole_mppi_hyperparams())
+    controller = MPPIController(env, num_samples=200, horizon=15, hyperparams=get_cartpole_mppi_hyperparams())
     controller.goal_state = torch.tensor(goal_state, dtype=torch.float32)
 
     frames = []
     num_steps = 150
 
-    Q = np.diag([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])  # 状态成本权重
+    # Q = np.diag([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])  # 状态成本权重
+    Q = np.diag([1.0, 5.0, 5.0, 0.5, 1, 1])  # 状态成本权重
     R = np.array([0.1])  # 控制输入成本权重
     
     pbar = tqdm(range(num_steps))
@@ -232,8 +236,12 @@ def main():
         # ipdb.set_trace()
         state_cost = state_diff.T @ Q @ state_diff
         input = control.detach().cpu().numpy()
-        control_cost = (R * input**2).item()  
-        angle_penalty = -50 * (np.cos(s[1]) + np.cos(s[2]) - 2)
+        # control_cost = (R * input**2).item()  
+        control_cost = 0* (R * input**2).item()  
+
+        # angle_penalty = -50 * (np.cos(s[1]) + np.cos(s[2]) - 2)
+        angle_penalty = -0 * (np.cos(s[1]) + np.cos(s[2]) - 2)
+
         error_i = state_cost + control_cost + angle_penalty
 
         pbar.set_description(f'Goal Error: {error_i:.4f}')
@@ -245,7 +253,7 @@ def main():
         frames.append(PILImage.fromarray(img))
 
         # 如果误差小于0.2则提前结束
-        if error_i < 0.2:
+        if error_i < 0.05:
             break
     
     print("creating animated gif, please wait about 10 seconds")
