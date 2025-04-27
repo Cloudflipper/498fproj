@@ -4,6 +4,7 @@ import pybullet as p
 import pybullet_data as pd
 from base_env import BaseEnv
 import gym
+import os
 
 
 class CartpoleEnv(BaseEnv):
@@ -39,7 +40,7 @@ class CartpoleEnv(BaseEnv):
             self.state = np.random.uniform(low=-0.05, high=0.05, size=(6,))
         p.resetSimulation()
         p.setAdditionalSearchPath(pd.getDataPath())
-        self.cartpole = p.loadURDF('cartpole1.urdf')
+        self.cartpole = p.loadURDF('cartpole2.urdf')
         p.setGravity(0, 0, -9.81)
         p.setTimeStep(self.dt)
         p.setRealTimeSimulation(0)
@@ -69,8 +70,7 @@ class CartpoleEnv(BaseEnv):
         x, x_dot = p.getJointState(self.cartpole, 0)[0:2]
         theta_1, theta_1_dot = p.getJointState(self.cartpole, 1)[0:2]
         theta_2, theta_2_dot = p.getJointState(self.cartpole, 2)[0:2]
-        # theta_2 += theta_1
-        # theta_2_dot += theta_1_dot
+
         return np.array([x, theta_1, theta_2, x_dot, theta_1_dot, theta_2_dot])
 
     def set_state(self, state):
@@ -158,6 +158,90 @@ class CartpoleEnv(BaseEnv):
         # ---
         return A, B
 
+def calculate_accelerations_torch(theta, phi, theta_dot, phi_dot, m_c, m_p, l, g, F, max_ddot=150):
+    cos_theta = torch.cos(theta)
+    cos_theta_phi = torch.cos(theta + phi)
+    sin_theta = torch.sin(theta)
+    sin_theta_phi = torch.sin(theta + phi)
+    cos_phi = torch.cos(phi)
+    sin_phi = torch.sin(phi)
+
+    batch_size = theta.shape[0]
+    M = torch.zeros((batch_size, 3, 3), device=theta.device)
+
+    M[:, 0, 0] = m_c + 2*m_p
+    M[:, 0, 1] = (3/2)*m_p*l*cos_theta + (1/2)*m_p*l*cos_theta_phi
+    M[:, 0, 2] = (1/2)*m_p*l*cos_theta_phi
+
+    M[:, 1, 0] = (3/2)*m_p*l*cos_theta + (1/2)*m_p*l*cos_theta_phi
+    M[:, 1, 1] = (5/3)*m_p*l**2 + (1/2)*m_p*l**2*cos_phi
+    M[:, 1, 2] = (1/2)*m_p*l**2*cos_phi + (1/3)*m_p*l**2
+
+    M[:, 2, 0] = (1/2)*m_p*l*cos_theta_phi
+    M[:, 2, 1] = (1/2)*m_p*l**2*cos_phi + (1/3)*m_p*l**2
+    M[:, 2, 2] = (1/3)*m_p*l**2
+
+    b = torch.zeros((batch_size, 3), device=theta.device)
+
+    b[:, 0] = F + (3/2)*m_p*l*theta_dot**2*sin_theta + (1/2)*m_p*l*(theta_dot + phi_dot)**2*sin_theta_phi
+    b[:, 1] = (1/2)*m_p*l**2*(theta_dot + phi_dot)*phi_dot*sin_phi + (3/2)*m_p*g*l*sin_theta + (1/2)*m_p*g*l*sin_theta_phi
+    b[:, 2] = (1/2)*m_p*g*l*sin_theta_phi - (1/2)*m_p*l**2*theta_dot**2*sin_phi
+
+    # Solve M * accelerations = b
+    accelerations = torch.linalg.solve(M, b)
+
+    # Clip theta_ddot and phi_ddot if max_ddot is specified
+    if max_ddot is not None:
+        accelerations[:, 1] = torch.clamp(accelerations[:, 1], min=-max_ddot, max=max_ddot)
+        accelerations[:, 2] = torch.clamp(accelerations[:, 2], min=-max_ddot, max=max_ddot)
+    # print("Max:", max_ddot)
+
+    return accelerations
+
+
+def dynamics_analytic(state, action):
+    """
+    Computes x_t+1 = f(x_t, u_t) for double-pendulum on cart using analytic model in PyTorch
+    Args:
+        state: torch.tensor of shape (B, 6) representing [x, theta, phi, x_dot, theta_dot, phi_dot]
+        action: torch.tensor of shape (B, 1) representing the force to apply
+
+    Returns:
+        next_state: torch.tensor of shape (B, 6) representing the next state
+    """
+    dt = 0.05
+    g = 9.81
+    mc = 1.0
+    mp = 0.1
+    l = 0.5
+
+    x, theta, phi, x_dot, theta_dot, phi_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3], state[:, 4], state[:, 5]
+    force = action.squeeze(-1)
+
+    accelerations = calculate_accelerations_torch(theta, phi, theta_dot, phi_dot, mc, mp, l, g, force)
+    # import ipdb
+    # ipdb.set_trace()
+
+    x_ddot = accelerations[:, 0]
+    # print("x_ddot:", x_ddot)
+    theta_ddot = accelerations[:, 1]
+    # print("theta_ddot:", theta_ddot)
+    phi_ddot = accelerations[:, 2]
+    # print("phi_ddot:", phi_ddot)
+
+    x_dot_next = x_dot + dt * x_ddot
+    theta_dot_next = theta_dot + dt * theta_ddot
+    phi_dot_next = phi_dot + dt * phi_ddot
+
+    x_next = x + dt * x_dot_next
+    theta_next = theta + dt * theta_dot_next
+    phi_next = phi + dt * phi_dot_next
+
+    next_state = torch.stack([
+        x_next, theta_next, phi_next, x_dot_next, theta_dot_next, phi_dot_next
+    ], dim=-1)
+
+    return next_state
 
 # def dynamics_analytic(state, action):
 #     """
@@ -179,7 +263,7 @@ class CartpoleEnv(BaseEnv):
 #     l = 0.5
 
 #     # --- Your code here
-#     print(state)
+#     # print(state)
 #     x, theta, x_dot, theta_dot = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
 #     force = action.squeeze(-1)  # Ensure action is (B,) if it was (B, 1)
 

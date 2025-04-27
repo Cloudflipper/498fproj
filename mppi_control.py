@@ -15,33 +15,9 @@ def get_cartpole_mppi_hyperparams():
     hyperparams = {
         'action_size': action_size,
         'state_size': state_size,
-        'lambda': 0.01,
-        'Q': torch.diag(torch.tensor([1.0, 5, 5, 0.1, 0.1, 0.1])).float(),
+        'lambda': 0.001,
+        'Q': torch.diag(torch.tensor([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])).float(),
         'noise_sigma': torch.eye(action_size) * 10,
-    }
-    # --- Your code here
-
-
-    # ---
-    return hyperparams
-
-
-def get_panda_mppi_hyperparams():
-    """
-    Returns a dictionary containing the hyperparameters for running MPPI on the panda environment
-    The required parameters are:
-     * lambda: float parameter between 0. and 1. used to weight samples.
-     * Q: torch tensor fo shape (state_size, state_size) representing the state quadratic cost.
-     * noise_sigma: torch tensor fo size (action_size, action_size) representing the covariance matrix  of the random action perturbations.
-    """
-    action_size = 7
-    state_size = 14
-    hyperparams = {
-        'action_size': action_size,
-        'state_size': state_size,
-        'lambda': 0.01,
-        'Q': torch.diag(torch.tensor([5., 5., 5., 5., 5., 5., 5.,  1.,  1.,  1.,  1.,  1.,  1.,  1.])).float(),
-        'noise_sigma': torch.eye(action_size) * 30.0,
     }
     # --- Your code here
 
@@ -195,31 +171,29 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from cartpole_env import * 
-# from cartpole_env1 import * 
+from cartpole_env1 import * 
 
-def create_env():
-    env = CartpoleEnv()
-    # env = MyCartpoleEnv()
-
-    # env.reset(np.array([0, 0.1, 0.1, 0, 0, 0]) + np.random.rand(6,))
-    env.reset(np.array([0, 0.1, 0.05, 0, 0, 0]))
-
-    return env
 
 def main():
-    # 初始化环境
-    env = create_env()
-    
+    env = CartpoleEnv()
+    env.reset(np.array([0, 0.1, 0, 0.1, 0, 0]))
+    # env.reset(np.array([0, np.pi, 0, 0, 0, 0]))
+
+
+    # env1 = MyCartpoleEnv()
+    # env1.reset(np.array([0, 0.1, -0.05, 0, 0, 0]))
+
     goal_state = np.zeros(6)
     controller = MPPIController(env, num_samples=200, horizon=15, hyperparams=get_cartpole_mppi_hyperparams())
     controller.goal_state = torch.tensor(goal_state, dtype=torch.float32)
 
     frames = []
-    num_steps = 150
+    num_steps = 500
 
-    # Q = np.diag([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])  # 状态成本权重
-    Q = np.diag([1.0, 5.0, 5.0, 0.5, 1, 1])  # 状态成本权重
-    R = np.array([0.1])  # 控制输入成本权重
+    # Q = np.diag([2.0, 10.0, 10.0, 0.1, 0.1, 0.1])
+    Q = torch.diag(torch.tensor([1, 5, 5, 0.1, 0.1, 0.1]))
+
+    R = np.array([0.1])
     
     pbar = tqdm(range(num_steps))
     
@@ -228,19 +202,27 @@ def main():
         state = torch.tensor(state, dtype=torch.float32)
         control = controller.command(state)
         s = env.step(control)
-        
+
+        # state1 = env1.get_state()
+        # state1 = torch.tensor(state1, dtype=torch.float32)
+        # control = controller.command(state1)
+        # s1 = env1.step(control)
+        # s1[5] = s1[5] + s1[4]
+        # s1[2] = s1[2] + s1[1]
+        # diff = s - s1
+        # print(diff)
         # error_i = np.linalg.norm(s - goal_state[:7])state_cost = float(state_diff.T @ Q @ state_diff)  # 转换为Python float
 
         state_diff = s[:6] - goal_state
         import ipdb
         # ipdb.set_trace()
-        state_cost = state_diff.T @ Q @ state_diff
+        state_cost = state_diff.T @ Q.detach().cpu().numpy() @ state_diff.T
         input = control.detach().cpu().numpy()
         # control_cost = (R * input**2).item()  
-        control_cost = 0* (R * input**2).item()  
+        control_cost = 1* (R * input**2).item()  
 
         # angle_penalty = -50 * (np.cos(s[1]) + np.cos(s[2]) - 2)
-        angle_penalty = -0 * (np.cos(s[1]) + np.cos(s[2]) - 2)
+        angle_penalty = -5 * (10*np.cos(s[1]) + 5*np.cos(s[1]+s[2]) - 15)
 
         error_i = state_cost + control_cost + angle_penalty
 
@@ -253,7 +235,7 @@ def main():
         frames.append(PILImage.fromarray(img))
 
         # 如果误差小于0.2则提前结束
-        if error_i < 0.05:
+        if error_i < 0.005:
             break
     
     print("creating animated gif, please wait about 10 seconds")
