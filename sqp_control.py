@@ -8,6 +8,7 @@ from PIL import Image as PILImage
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import cv2
+import os
 
 def get_cartpole_sqp_hyperparams():
     hyperparams = {
@@ -68,16 +69,21 @@ class SQPController:
 
 def main():
     env = CartpoleEnv()
-    env.reset(np.array([0, np.pi, 0, 0, 0, 0]))
+    # env.reset(np.array([0, np.pi, 0, 0, 0, 0]))
+    env.reset(np.array([0, 0.05, -0.02, 0.03, 0, 0]))
+
 
     controller = SQPController(env, get_cartpole_sqp_hyperparams())
 
     frames = []
     state_diffs = []
-    num_steps = 350
+    num_steps = 50
     goal_state = np.zeros(6)
     Q = np.diag([2.0, 10.0, 10.0, 2, 5, 5])
     R = np.array([0.1])
+
+    pole1_heights = []
+    pole2_heights = []
 
     pbar = tqdm(range(num_steps))
     
@@ -108,15 +114,52 @@ def main():
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # OpenCV 使用BGR格式
         out.write(img_bgr)
 
+        l1, l2 = 1.0, 1.0
+        theta1, theta2 = s[1], s[2]
+
+        y_pole1 = l1 * np.cos(theta1)
+        y_pole2 = y_pole1 + l2 * np.cos(theta1 + theta2)
+
+        pole1_heights.append(y_pole1)
+        pole2_heights.append(y_pole2)
+
         if error < 0.02:
             break
+    
+        
 
-    # 释放VideoWriter
+    
+    save_dir = './saved_figures'
+    os.makedirs(save_dir, exist_ok=True)
+
+    plt.figure()
+    plt.plot(pole1_heights, label='Pole1 End Height')
+    plt.axhline(y=1.0, color='r', linestyle='--', label='Goal Height')
+    plt.axhline(y=np.mean(pole1_heights), color='b', linestyle='--', label='Average Height')
+    plt.xlabel('Time Step')
+    plt.ylabel('Height (m)')
+    plt.title('Pole 1 End Height Over Time (SQP)')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(save_dir, 'sqp_high_pole1_height_over_time.png'))
+    plt.show()
+
+    plt.figure()
+    plt.plot(pole2_heights, label='Pole2 End Height')
+    plt.axhline(y=2.0, color='r', linestyle='--', label='Goal Height')
+    plt.axhline(y=np.mean(pole2_heights), color='b', linestyle='--', label='Average Height')
+    plt.xlabel('Time Step')
+    plt.ylabel('Height (m)')
+    plt.title('Pole 2 End Height Over Time (SQP)')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(save_dir, 'sqp_high_pole2_height_over_time.png'))
+    plt.show()
+
     out.release()
 
     print("MP4 created successfully!")
 
-    # 在屏幕上显示视频
     video = cv2.VideoCapture('cartpole_sqp.mp4')
     while video.isOpened():
         ret, frame = video.read()
@@ -137,6 +180,11 @@ def main():
     # plt.legend()
     # plt.title('State Differences (First 3 Dimensions) Over Time')
     # plt.show()
+
+    save_dir = './saved_figures'
+    os.makedirs(save_dir, exist_ok=True)
+
+
 
 
 

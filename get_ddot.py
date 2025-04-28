@@ -34,5 +34,5 @@ def calculate_accelerations(theta, phi, theta_dot, phi_dot, m_c, m_p, l, g, F):
            (1/2)*m_p*l**2*theta_dot**2*sin_phi
 
     accelerations = np.linalg.solve(M, b)
-    
-    return accelerations 
+
+    return accelerations

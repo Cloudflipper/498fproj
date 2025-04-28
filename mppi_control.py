@@ -17,7 +17,7 @@ def get_cartpole_mppi_hyperparams():
         'state_size': state_size,
         'lambda': 0.001,
         'Q': torch.diag(torch.tensor([1.0, 5.0, 5.0, 0.1, 0.1, 0.1])).float(),
-        'noise_sigma': torch.eye(action_size) * 10,
+        'noise_sigma': torch.eye(action_size) * 70,
     }
     # --- Your code here
 
@@ -171,13 +171,13 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from cartpole_env import * 
-from cartpole_env1 import * 
+import os
 
 
 def main():
     env = CartpoleEnv()
-    env.reset(np.array([0, 0.1, 0, 0.1, 0, 0]))
-    # env.reset(np.array([0, np.pi, 0, 0, 0, 0]))
+    # env.reset(np.array([0, 0.1, 0, 0.1, 0, 0]))
+    env.reset(np.array([0, np.pi, 0, 0, 0, 0]))
 
 
     # env1 = MyCartpoleEnv()
@@ -188,12 +188,15 @@ def main():
     controller.goal_state = torch.tensor(goal_state, dtype=torch.float32)
 
     frames = []
-    num_steps = 500
+    num_steps = 350
 
     # Q = np.diag([2.0, 10.0, 10.0, 0.1, 0.1, 0.1])
     Q = torch.diag(torch.tensor([1, 5, 5, 0.1, 0.1, 0.1]))
 
     R = np.array([0.1])
+
+    pole1_heights = []
+    pole2_heights = []
     
     pbar = tqdm(range(num_steps))
     
@@ -228,26 +231,57 @@ def main():
 
         pbar.set_description(f'Goal Error: {error_i:.4f}')
         
-        # 渲染图像
         img = env.render()
 
-        # 将图像保存为帧
         frames.append(PILImage.fromarray(img))
 
-        # 如果误差小于0.2则提前结束
+        l1, l2 = 1.0, 1.0
+        theta1, theta2 = s[1], s[2]
+
+        y_pole1 = l1 * np.cos(theta1)
+        y_pole2 = y_pole1 + l2 * np.cos(theta1 + theta2)
+
+        pole1_heights.append(y_pole1)
+        pole2_heights.append(y_pole2)
+
         if error_i < 0.005:
             break
     
+    save_dir = './saved_figures'
+    os.makedirs(save_dir, exist_ok=True)
+
+    plt.figure()
+    plt.plot(pole1_heights, label='Pole1 End Height')
+    plt.axhline(y=1.0, color='r', linestyle='--', label='Goal Height')
+    plt.axhline(y=np.mean(pole1_heights), color='b', linestyle='--', label='Average Height')
+    plt.xlabel('Time Step')
+    plt.ylabel('Height (m)')
+    plt.title('Pole 1 End Height Over Time (MPPI)')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(save_dir, 'pole1_height_over_time.png'))
+    plt.show()
+
+    plt.figure()
+    plt.plot(pole2_heights, label='Pole2 End Height')
+    plt.axhline(y=2.0, color='r', linestyle='--', label='Goal Height')
+    plt.axhline(y=np.mean(pole2_heights), color='b', linestyle='--', label='Average Height')
+    plt.xlabel('Time Step')
+    plt.ylabel('Height (m)')
+    plt.title('Pole 2 End Height Over Time (MPPI)')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(save_dir, 'pole2_height_over_time.png'))
+    plt.show()
+    
     print("creating animated gif, please wait about 10 seconds")
 
-    # 创建 GIF 动画（使用 PIL）
     frames[0].save("cartpole_mppi.gif", save_all=True, append_images=frames[1:], duration=100, loop=0)
 
     print("GIF created successfully!")
 
-    # 显示GIF（在本地环境中可能需要用合适的工具显示 GIF）
     plt.imshow(plt.imread("cartpole_mppi.gif"))
-    plt.axis('off')  # 不显示坐标轴
+    plt.axis('off')
     plt.show()
 
 if __name__ == "__main__":
